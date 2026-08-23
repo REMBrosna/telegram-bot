@@ -11,10 +11,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.*;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
-import java.util.*;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -44,19 +49,12 @@ public class ExpenseService {
     public String addExpense(Long userId, String command) {
         ParsedExpense parsed = expenseParser.parse(command);
 
-        String category =
-                categoryDetector.detect(parsed.description());
+        String category = categoryDetector.detect(parsed.description());
 
-        Expense expense = expenseRepository.save(
-                new Expense(
-                        userId,
-                        parsed.amount(),
-                        parsed.currency(),
-                        category,
-                        parsed.description(),
-                        Instant.now()
-                )
-        );
+        Expense expense = new Expense(userId, parsed.amount(), parsed.currency(), category,
+                parsed.description(), Instant.now());
+
+        expense = expenseRepository.save(expense);
 
         return """
                 ✅ Expense added
@@ -75,6 +73,7 @@ public class ExpenseService {
 
     @Transactional(readOnly = true)
     public String todaySummary(Long userId) {
+
         ZoneId zoneId = appProperties.zoneId();
         LocalDate today = LocalDate.now(zoneId);
 
@@ -84,17 +83,15 @@ public class ExpenseService {
         List<Expense> expenses =
                 expenseRepository
                         .findByTelegramUserIdAndExpenseDateGreaterThanEqualAndExpenseDateLessThanOrderByExpenseDateDesc(
-                                userId,
-                                start,
-                                end
-                        );
+                                userId, start, end);
 
         if (expenses.isEmpty()) {
-            return "📭 No expenses today.";
+            StringBuilder result = new StringBuilder("📭 No expenses today.");
+            appendMonthlyBudgetStatuses(result, userId, today, zoneId);
+            return result.toString().trim();
         }
 
-        StringBuilder result =
-                new StringBuilder("📅 Today's Expenses\n\n");
+        StringBuilder result = new StringBuilder("📅 Today's Expenses\n\n");
 
         for (Expense expense : expenses) {
             result.append("#")
@@ -109,6 +106,7 @@ public class ExpenseService {
         }
 
         appendCurrencyTotals(result, expenses);
+        appendMonthlyBudgetStatuses(result, userId, today, zoneId);
 
         return result.toString().trim();
     }
@@ -119,11 +117,8 @@ public class ExpenseService {
         LocalDate today = LocalDate.now(zoneId);
         LocalDate firstDay = today.withDayOfMonth(1);
 
-        Instant start =
-                firstDay.atStartOfDay(zoneId).toInstant();
-
-        Instant end =
-                firstDay.plusMonths(1).atStartOfDay(zoneId).toInstant();
+        Instant start = firstDay.atStartOfDay(zoneId).toInstant();
+        Instant end = firstDay.plusMonths(1).atStartOfDay(zoneId).toInstant();
 
         List<Expense> expenses =
                 expenseRepository
@@ -133,20 +128,17 @@ public class ExpenseService {
                                 end
                         );
 
-        String month =
-                today.getMonth()
-                        .getDisplayName(TextStyle.FULL, Locale.ENGLISH);
+        String month = today.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH);
 
         if (expenses.isEmpty()) {
             return "📭 No expenses for " + month + " " + today.getYear() + ".";
         }
 
-        StringBuilder result =
-                new StringBuilder("📊 ")
-                        .append(month)
-                        .append(" ")
-                        .append(today.getYear())
-                        .append("\n");
+        StringBuilder result = new StringBuilder("📊 ")
+                .append(month)
+                .append(" ")
+                .append(today.getYear())
+                .append("\n");
 
         Map<String, List<Expense>> byCurrency =
                 expenses.stream()
@@ -155,6 +147,8 @@ public class ExpenseService {
                                 TreeMap::new,
                                 Collectors.toList()
                         ));
+
+        BigDecimal grandTotalUsd = BigDecimal.ZERO;
 
         for (Map.Entry<String, List<Expense>> currencyEntry : byCurrency.entrySet()) {
             String currency = currencyEntry.getKey();
@@ -177,13 +171,8 @@ public class ExpenseService {
                                     )
                             );
 
-            categoryTotals.entrySet()
-                    .stream()
-                    .sorted(
-                            Map.Entry.<String, BigDecimal>
-                                    comparingByValue()
-                                    .reversed()
-                    )
+            categoryTotals.entrySet().stream()
+                    .sorted(Map.Entry.<String, BigDecimal>comparingByValue().reversed())
                     .forEach(entry ->
                             result.append(emoji(entry.getKey()))
                                     .append(" ")
@@ -193,10 +182,11 @@ public class ExpenseService {
                                     .append("\n")
                     );
 
-            BigDecimal total =
-                    currencyExpenses.stream()
-                            .map(Expense::getAmount)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal total = currencyExpenses.stream()
+                    .map(Expense::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            grandTotalUsd = grandTotalUsd.add(convertToUsd(total, currency));
 
             result.append("\n💰 Total ")
                     .append(currency)
@@ -204,26 +194,18 @@ public class ExpenseService {
                     .append(formatMoney(total, currency))
                     .append("\n");
 
-            budgetRepository
-                    .findByTelegramUserIdAndCurrency(userId, currency)
-                    .ifPresent(budget ->
-                            appendBudgetStatus(
-                                    result,
-                                    budget.getAmount(),
-                                    total,
-                                    currency
-                            )
-                    );
+            budgetRepository.findByTelegramUserIdAndCurrency(userId, currency)
+                    .ifPresent(budget -> appendBudgetStatus(result, budget.getAmount(), total, currency));
         }
+
+        appendGrandTotal(result, grandTotalUsd, byCurrency);
 
         return result.toString().trim();
     }
 
     @Transactional(readOnly = true)
     public String history(Long userId) {
-        List<Expense> expenses =
-                expenseRepository
-                        .findTop10ByTelegramUserIdOrderByExpenseDateDesc(userId);
+        List<Expense> expenses = expenseRepository.findTop10ByTelegramUserIdOrderByExpenseDateDesc(userId);
 
         if (expenses.isEmpty()) {
             return "📭 No expenses yet.";
@@ -231,17 +213,12 @@ public class ExpenseService {
 
         ZoneId zoneId = appProperties.zoneId();
 
-        DateTimeFormatter formatter =
-                DateTimeFormatter.ofPattern("dd MMM HH:mm");
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd MMM HH:mm");
 
-        StringBuilder result =
-                new StringBuilder("🧾 Last 10 Expenses\n\n");
+        StringBuilder result = new StringBuilder("🧾 Last 10 Expenses\n\n");
 
         for (Expense expense : expenses) {
-            String date =
-                    expense.getExpenseDate()
-                            .atZone(zoneId)
-                            .format(formatter);
+            String date = expense.getExpenseDate().atZone(zoneId).format(formatter);
 
             result.append("#")
                     .append(expense.getId())
@@ -252,10 +229,7 @@ public class ExpenseService {
                     .append(" ")
                     .append(expense.getDescription())
                     .append(" — ")
-                    .append(formatMoney(
-                            expense.getAmount(),
-                            expense.getCurrency()
-                    ))
+                    .append(formatMoney(expense.getAmount(), expense.getCurrency()))
                     .append("\n");
         }
 
@@ -265,14 +239,10 @@ public class ExpenseService {
     }
 
     public String deleteExpense(Long userId, String command) {
-        String idText =
-                command.replaceFirst("(?i)^/delete", "")
-                        .trim();
+        String idText = command.replaceFirst("(?i)^/delete", "").trim();
 
         if (idText.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Usage: /delete 15"
-            );
+            throw new IllegalArgumentException("Usage: /delete 15");
         }
 
         Long id;
@@ -280,40 +250,25 @@ public class ExpenseService {
         try {
             id = Long.valueOf(idText);
         } catch (NumberFormatException ex) {
-            throw new IllegalArgumentException(
-                    "Expense ID must be a number."
-            );
+            throw new IllegalArgumentException("Expense ID must be a number.");
         }
 
-        Expense expense =
-                expenseRepository
-                        .findByIdAndTelegramUserId(id, userId)
-                        .orElseThrow(
-                                () -> new IllegalArgumentException(
-                                        "Expense #" + id + " was not found."
-                                )
-                        );
+        Expense expense = expenseRepository.findByIdAndTelegramUserId(id, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Expense #" + id + " was not found."));
 
         expenseRepository.delete(expense);
 
         return "🗑 Deleted expense #" + id + ": "
                 + expense.getDescription()
                 + " — "
-                + formatMoney(
-                        expense.getAmount(),
-                        expense.getCurrency()
-                );
+                + formatMoney(expense.getAmount(), expense.getCurrency());
     }
 
     public String setBudget(Long userId, String command) {
-        String body =
-                command.replaceFirst("(?i)^/budget", "")
-                        .trim();
+        String body = command.replaceFirst("(?i)^/budget", "").trim();
 
         if (body.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Usage: /budget 500 or /budget 2000000 khr"
-            );
+            throw new IllegalArgumentException("Usage: /budget 500 or /budget 2000000 khr");
         }
 
         String[] parts = body.split("\\s+");
@@ -327,57 +282,24 @@ public class ExpenseService {
         }
 
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException(
-                    "Budget must be greater than zero."
-            );
+            throw new IllegalArgumentException("Budget must be greater than zero.");
         }
 
-        String currency =
-                parts.length >= 2
-                        ? expenseParser.normalizeCurrency(parts[1])
-                        : "USD";
+        String currency = parts.length >= 2 ? expenseParser.normalizeCurrency(parts[1]) : "USD";
 
-        Budget budget =
-                budgetRepository
-                        .findByTelegramUserIdAndCurrency(userId, currency)
-                        .orElseGet(
-                                () -> new Budget(
-                                        userId,
-                                        currency,
-                                        amount
-                                )
-                        );
+        Budget budget = budgetRepository.findByTelegramUserIdAndCurrency(userId, currency)
+                .orElseGet(() -> new Budget(userId, currency, amount));
 
         budget.updateAmount(amount);
 
         budgetRepository.save(budget);
-
-        return "🎯 Monthly "
-                + currency
-                + " budget set to "
-                + formatMoney(amount, currency);
+        return "🎯 Monthly " + currency + " budget set to " + formatMoney(amount, currency);
     }
 
-    private void appendCurrencyTotals(
-            StringBuilder result,
-            List<Expense> expenses
-    ) {
-        Map<String, BigDecimal> totals =
-                expenses.stream()
-                        .collect(
-                                Collectors.groupingBy(
-                                        Expense::getCurrency,
-                                        TreeMap::new,
-                                        Collectors.reducing(
-                                                BigDecimal.ZERO,
-                                                Expense::getAmount,
-                                                BigDecimal::add
-                                        )
-                                )
-                        );
+    private void appendCurrencyTotals(StringBuilder result, List<Expense> expenses) {
+        Map<String, BigDecimal> totals = totalsByCurrency(expenses);
 
         result.append("\n");
-
         totals.forEach(
                 (currency, total) ->
                         result.append("\n💰 Total ")
@@ -387,14 +309,56 @@ public class ExpenseService {
         );
     }
 
-    private void appendBudgetStatus(
+    private void appendMonthlyBudgetStatuses(
             StringBuilder result,
-            BigDecimal budget,
-            BigDecimal spent,
-            String currency
+            Long userId,
+            LocalDate today,
+            ZoneId zoneId
     ) {
-        BigDecimal remaining =
-                budget.subtract(spent);
+        List<Budget> budgets = budgetRepository.findByTelegramUserId(userId);
+
+        if (budgets.isEmpty()) {
+            return;
+        }
+
+        LocalDate firstDay = today.withDayOfMonth(1);
+        Instant start = firstDay.atStartOfDay(zoneId).toInstant();
+        Instant end = firstDay.plusMonths(1).atStartOfDay(zoneId).toInstant();
+
+        List<Expense> monthExpenses =
+                expenseRepository
+                        .findByTelegramUserIdAndExpenseDateGreaterThanEqualAndExpenseDateLessThanOrderByExpenseDateDesc(
+                                userId,
+                                start,
+                                end
+                        );
+
+        Map<String, BigDecimal> monthlyTotals = totalsByCurrency(monthExpenses);
+
+        result.append("\n\nMonthly budget");
+
+        budgets.stream()
+                .sorted((first, second) -> first.getCurrency().compareTo(second.getCurrency()))
+                .forEach(budget -> {
+                    String currency = budget.getCurrency();
+                    BigDecimal spent = monthlyTotals.getOrDefault(currency, BigDecimal.ZERO);
+
+                    result.append("\n").append(currency).append("\n");
+                    appendBudgetStatus(result, budget.getAmount(), spent, currency);
+                });
+    }
+
+    private Map<String, BigDecimal> totalsByCurrency(List<Expense> expenses) {
+        return expenses.stream()
+                .collect(Collectors.groupingBy(
+                        Expense::getCurrency,
+                        TreeMap::new,
+                        Collectors.reducing(BigDecimal.ZERO, Expense::getAmount, BigDecimal::add)
+                ));
+    }
+
+    private void appendBudgetStatus(StringBuilder result, BigDecimal budget, BigDecimal spent, String currency) {
+        BigDecimal remaining = budget.subtract(spent);
 
         result.append("🎯 Budget: ")
                 .append(formatMoney(budget, currency))
@@ -406,23 +370,13 @@ public class ExpenseService {
                     .append("\n");
         } else {
             result.append("⚠️ Over budget: ")
-                    .append(
-                            formatMoney(
-                                    remaining.abs(),
-                                    currency
-                            )
-                    )
+                    .append(formatMoney(remaining.abs(), currency))
                     .append("\n");
         }
 
         if (budget.signum() > 0) {
-            BigDecimal percent =
-                    spent.multiply(BigDecimal.valueOf(100))
-                            .divide(
-                                    budget,
-                                    0,
-                                    RoundingMode.HALF_UP
-                            );
+            BigDecimal percent = spent.multiply(BigDecimal.valueOf(100))
+                    .divide(budget, 0, RoundingMode.HALF_UP);
 
             result.append("📈 Used: ")
                     .append(percent)
@@ -430,22 +384,42 @@ public class ExpenseService {
         }
     }
 
-    private String formatMoney(
-            BigDecimal amount,
-            String currency
+    private void appendGrandTotal(
+            StringBuilder result,
+            BigDecimal grandTotalUsd,
+            Map<String, List<Expense>> byCurrency
     ) {
+        if (byCurrency.size() <= 1) {
+            return;
+        }
+
+        result.append("\n\n🌐 Grand total: ")
+                .append(formatMoney(grandTotalUsd, "USD"))
+                .append(" (1 USD = ")
+                .append(formatRate(appProperties.khrToUsdRate()))
+                .append(" KHR)");
+    }
+
+    private BigDecimal convertToUsd(BigDecimal amount, String currency) {
+        if ("KHR".equals(currency)) {
+            return amount.divide(appProperties.khrToUsdRate(), 6, RoundingMode.HALF_UP);
+        }
+
+        return amount;
+    }
+
+    private String formatRate(BigDecimal rate) {
+        return rate.stripTrailingZeros().toPlainString();
+    }
+
+    private String formatMoney(BigDecimal amount, String currency) {
         if ("KHR".equals(currency)) {
             return amount.setScale(0, RoundingMode.HALF_UP)
                     .toPlainString()
                     + " KHR";
         }
 
-        return "$"
-                + amount.setScale(
-                                2,
-                                RoundingMode.HALF_UP
-                        )
-                        .toPlainString();
+        return "$" + amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     private String emoji(String category) {

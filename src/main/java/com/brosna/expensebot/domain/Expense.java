@@ -1,6 +1,12 @@
 package com.brosna.expensebot.domain;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -8,12 +14,7 @@ import java.time.Instant;
 @Entity
 @Table(
         name = "expenses",
-        indexes = {
-                @Index(
-                        name = "idx_expense_user_date",
-                        columnList = "telegram_user_id,expense_date"
-                )
-        }
+        indexes = @Index(name = "idx_expense_user_date", columnList = "telegram_user_id,expense_date")
 )
 public class Expense {
 

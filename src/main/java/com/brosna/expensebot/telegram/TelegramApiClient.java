@@ -13,8 +13,7 @@ import java.util.Map;
 @Component
 public class TelegramApiClient {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(TelegramApiClient.class);
+    private static final Logger log = LoggerFactory.getLogger(TelegramApiClient.class);
 
     private final TelegramProperties properties;
     private final RestClient restClient;
@@ -33,38 +32,21 @@ public class TelegramApiClient {
     }
 
     public void registerWebhook() {
-        String baseUrl =
-                removeTrailingSlash(properties.getAppBaseUrl());
-
-        String webhookUrl =
-                baseUrl + "/telegram/webhook";
+        String baseUrl = removeTrailingSlash(properties.getAppBaseUrl());
+        String webhookUrl = baseUrl + "/telegram/webhook";
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("url", webhookUrl);
-        body.put(
-                "secret_token",
-                properties.getWebhookSecret()
-        );
+        body.put("secret_token", properties.getWebhookSecret());
         body.put("drop_pending_updates", false);
 
-        JsonNode response =
-                post("setWebhook", body);
+        JsonNode response = post("setWebhook", body);
 
-        log.info(
-                "Telegram webhook registration response: {}",
-                response
-        );
+        log.info("Telegram webhook registration response: {}", response);
     }
 
-    private JsonNode post(
-            String method,
-            Map<String, Object> body
-    ) {
-        String url =
-                "https://api.telegram.org/bot"
-                        + properties.getBotToken()
-                        + "/"
-                        + method;
+    private JsonNode post(String method, Map<String, Object> body) {
+        String url = "https://api.telegram.org/bot" + properties.getBotToken() + "/" + method;
 
         return restClient
                 .post()

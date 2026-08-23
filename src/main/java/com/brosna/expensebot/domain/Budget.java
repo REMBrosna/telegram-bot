@@ -1,6 +1,12 @@
 package com.brosna.expensebot.domain;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -8,12 +14,10 @@ import java.time.Instant;
 @Entity
 @Table(
         name = "budgets",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uk_budget_user_currency",
-                        columnNames = {"telegram_user_id", "currency"}
-                )
-        }
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_budget_user_currency",
+                columnNames = {"telegram_user_id", "currency"}
+        )
 )
 public class Budget {
 

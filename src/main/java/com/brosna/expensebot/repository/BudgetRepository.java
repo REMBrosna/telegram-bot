@@ -8,10 +8,7 @@ import java.util.Optional;
 
 public interface BudgetRepository extends JpaRepository<Budget, Long> {
 
-    Optional<Budget> findByTelegramUserIdAndCurrency(
-            Long telegramUserId,
-            String currency
-    );
+    Optional<Budget> findByTelegramUserIdAndCurrency(Long telegramUserId, String currency);
 
     List<Budget> findByTelegramUserId(Long telegramUserId);
 }

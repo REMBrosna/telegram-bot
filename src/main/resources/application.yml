@@ -35,3 +35,4 @@ telegram:
 
 app:
   time-zone: ${APP_TIME_ZONE:Asia/Phnom_Penh}
+  khr-to-usd-rate: ${APP_KHR_TO_USD_RATE:4100}

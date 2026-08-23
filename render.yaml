@@ -20,3 +20,5 @@ services:
         sync: false
       - key: APP_TIME_ZONE
         value: Asia/Phnom_Penh
+      - key: APP_KHR_TO_USD_RATE
+        value: 4100

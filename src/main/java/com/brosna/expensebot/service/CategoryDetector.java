@@ -11,44 +11,33 @@ public class CategoryDetector {
     public String detect(String description) {
         String text = description.toLowerCase(Locale.ROOT);
 
-        if (contains(text,
-                "coffee", "food", "lunch", "dinner", "breakfast",
-                "restaurant", "kfc", "pizza", "burger", "rice",
-                "noodle", "drink", "cafe")) {
+        if (contains(text, "coffee", "food", "lunch", "dinner", "breakfast", "restaurant", "kfc",
+                "pizza", "burger", "rice", "noodle", "drink", "cafe")) {
             return "FOOD";
         }
 
-        if (contains(text,
-                "fuel", "gas", "petrol", "car wash", "garage",
-                "engine", "oil", "parking", "tire", "tyre", "car service")) {
+        if (contains(text, "fuel", "gas", "petrol", "car wash", "garage", "engine", "oil",
+                "parking", "tire", "tyre", "car service")) {
             return "CAR";
         }
 
-        if (contains(text,
-                "grab", "tuktuk", "tuk tuk", "taxi", "bus",
-                "transport", "passapp")) {
+        if (contains(text, "grab", "tuktuk", "tuk tuk", "taxi", "bus", "transport", "passapp")) {
             return "TRANSPORT";
         }
 
-        if (contains(text,
-                "shopping", "shirt", "shoe", "clothes", "mall",
-                "bag", "watch")) {
+        if (contains(text, "shopping", "shirt", "shoe", "clothes", "mall", "bag", "watch")) {
             return "SHOPPING";
         }
 
-        if (contains(text,
-                "internet", "electric", "electricity", "water",
-                "phone", "rent", "bill")) {
+        if (contains(text, "internet", "electric", "electricity", "water", "phone", "rent", "bill")) {
             return "BILL";
         }
 
-        if (contains(text,
-                "netflix", "spotify", "movie", "cinema", "game")) {
+        if (contains(text, "netflix", "spotify", "movie", "cinema", "game")) {
             return "ENTERTAINMENT";
         }
 
-        if (contains(text,
-                "doctor", "hospital", "medicine", "pharmacy", "clinic")) {
+        if (contains(text, "doctor", "hospital", "medicine", "pharmacy", "clinic")) {
             return "HEALTH";
         }
 

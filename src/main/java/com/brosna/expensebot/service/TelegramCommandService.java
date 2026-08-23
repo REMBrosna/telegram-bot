@@ -12,8 +12,7 @@ import java.util.Locale;
 @Service
 public class TelegramCommandService {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(TelegramCommandService.class);
+    private static final Logger log = LoggerFactory.getLogger(TelegramCommandService.class);
 
     private final ExpenseService expenseService;
     private final TelegramApiClient telegramApiClient;
@@ -31,79 +30,49 @@ public class TelegramCommandService {
 
     public void handleUpdate(JsonNode update) {
         JsonNode message = update.get("message");
-
         if (message == null) {
             return;
         }
 
         JsonNode textNode = message.get("text");
-
         if (textNode == null) {
             return;
         }
 
-        long chatId =
-                message.path("chat")
-                        .path("id")
-                        .asLong();
+        long chatId = message.path("chat")
+                .path("id")
+                .asLong();
 
-        long userId =
-                message.path("from")
-                        .path("id")
-                        .asLong();
+        long userId = message.path("from")
+                .path("id")
+                .asLong();
 
-        String text =
-                textNode.asText("")
-                        .trim();
-
+        String text = textNode.asText("").trim();
         if (text.isBlank()) {
             return;
         }
 
         if (!isAllowed(userId)) {
-            telegramApiClient.sendMessage(
-                    chatId,
-                    "🔒 This is a private expense bot."
-            );
+            telegramApiClient.sendMessage(chatId, "🔒 This is a private expense bot.");
             return;
         }
 
         try {
-            String response =
-                    route(userId, text);
-
-            telegramApiClient.sendMessage(
-                    chatId,
-                    response
-            );
+            String response = route(userId, text);
+            telegramApiClient.sendMessage(chatId, response);
 
         } catch (IllegalArgumentException ex) {
-            telegramApiClient.sendMessage(
-                    chatId,
-                    "❌ " + ex.getMessage()
-            );
+            telegramApiClient.sendMessage(chatId, "❌ " + ex.getMessage());
         } catch (Exception ex) {
-            log.error(
-                    "Failed to process Telegram update",
-                    ex
-            );
-
-            telegramApiClient.sendMessage(
-                    chatId,
-                    "❌ Something went wrong. Please try again."
-            );
+            log.error("Failed to process Telegram update", ex);
+            telegramApiClient.sendMessage(chatId, "❌ Something went wrong. Please try again.");
         }
     }
 
-    private String route(
-            long userId,
-            String text
-    ) {
-        String lower =
-                text.toLowerCase(Locale.ROOT);
+    private String route(long userId, String text) {
+        String lower = text.toLowerCase(Locale.ROOT);
 
-        if (lower.equals("/start")
-                || lower.equals("/help")) {
+        if (lower.equals("/start") || lower.equals("/help")) {
             return help();
         }
 
@@ -124,31 +93,19 @@ public class TelegramCommandService {
         }
 
         if (lower.startsWith("/delete")) {
-            return expenseService.deleteExpense(
-                    userId,
-                    text
-            );
+            return expenseService.deleteExpense(userId, text);
         }
 
         if (lower.startsWith("/budget")) {
-            return expenseService.setBudget(
-                    userId,
-                    text
-            );
+            return expenseService.setBudget(userId, text);
         }
 
         if (lower.startsWith("/add")) {
-            return expenseService.addExpense(
-                    userId,
-                    text
-            );
+            return expenseService.addExpense(userId, text);
         }
 
         if (Character.isDigit(text.charAt(0))) {
-            return expenseService.addExpense(
-                    userId,
-                    text
-            );
+            return expenseService.addExpense(userId, text);
         }
 
         return """
@@ -167,22 +124,16 @@ public class TelegramCommandService {
     }
 
     private boolean isAllowed(long userId) {
-        String allowed =
-                properties.getAllowedUserId();
+        String allowed = properties.getAllowedUserId();
 
         if (allowed == null || allowed.isBlank()) {
             return true;
         }
 
         try {
-            return Long.parseLong(
-                    allowed.trim()
-            ) == userId;
+            return Long.parseLong(allowed.trim()) == userId;
         } catch (NumberFormatException ex) {
-            log.warn(
-                    "ALLOWED_TELEGRAM_USER_ID is not a valid number. "
-                            + "Denying access for safety."
-            );
+            log.warn("ALLOWED_TELEGRAM_USER_ID is not a valid number. Denying access for safety.");
             return false;
         }
     }

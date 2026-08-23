@@ -108,6 +108,7 @@ Set environment variables.
 $env:TELEGRAM_BOT_TOKEN="your-token"
 $env:TELEGRAM_WEBHOOK_SECRET="your-secret"
 $env:APP_BASE_URL="https://your-public-url.example"
+$env:APP_KHR_TO_USD_RATE="4100"
 $env:DB_URL="jdbc:postgresql://..."
 $env:DB_USERNAME="..."
 $env:DB_PASSWORD="..."
@@ -147,6 +148,7 @@ Optional:
 
 ```text
 ALLOWED_TELEGRAM_USER_ID
+APP_KHR_TO_USD_RATE
 ```
 
 On Render, `APP_BASE_URL` is optional because the app automatically uses Render's `RENDER_EXTERNAL_URL`. If you set `APP_BASE_URL` yourself, do not add a trailing slash.
@@ -232,7 +234,15 @@ and:
 /budget 2000000 khr
 ```
 
-The bot keeps USD and KHR totals separate instead of applying an exchange rate.
+The bot keeps USD and KHR sections separate, then adds a converted grand total when a month has more than one currency.
+The conversion uses `APP_KHR_TO_USD_RATE`, which defaults to `4100`.
+`/today` also shows monthly budget status when a budget is set.
+
+Example mixed-currency total:
+
+```text
+Grand total: $206.10 (1 USD = 4100 KHR)
+```
 
 ## Render free-tier note
 

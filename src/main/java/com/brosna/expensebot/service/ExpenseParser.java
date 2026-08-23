@@ -11,9 +11,7 @@ public class ExpenseParser {
 
     public ParsedExpense parse(String raw) {
         if (raw == null || raw.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Usage: /add 5 coffee or /add 20000 khr lunch"
-            );
+            throw new IllegalArgumentException("Usage: /add 5 coffee or /add 20000 khr lunch");
         }
 
         String text = raw.trim();
@@ -25,9 +23,7 @@ public class ExpenseParser {
         String[] parts = text.split("\\s+");
 
         if (parts.length < 2) {
-            throw new IllegalArgumentException(
-                    "Usage: /add 5 coffee or /add 20000 khr lunch"
-            );
+            throw new IllegalArgumentException("Usage: /add 5 coffee or /add 20000 khr lunch");
         }
 
         BigDecimal amount;
@@ -62,11 +58,7 @@ public class ExpenseParser {
             description.append(parts[i]);
         }
 
-        return new ParsedExpense(
-                amount,
-                currency,
-                description.toString()
-        );
+        return new ParsedExpense(amount, currency, description.toString());
     }
 
     public String normalizeCurrency(String value) {
@@ -75,9 +67,7 @@ public class ExpenseParser {
         return switch (currency) {
             case "$", "USD" -> "USD";
             case "KHR", "៛", "RIEL" -> "KHR";
-            default -> throw new IllegalArgumentException(
-                    "Supported currencies: USD or KHR."
-            );
+            default -> throw new IllegalArgumentException("Supported currencies: USD or KHR.");
         };
     }
 

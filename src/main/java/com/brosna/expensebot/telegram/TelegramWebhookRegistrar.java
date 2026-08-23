@@ -9,14 +9,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class TelegramWebhookRegistrar {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(TelegramWebhookRegistrar.class);
+    private static final Logger log = LoggerFactory.getLogger(TelegramWebhookRegistrar.class);
 
     private final TelegramApiClient telegramApiClient;
 
-    public TelegramWebhookRegistrar(
-            TelegramApiClient telegramApiClient
-    ) {
+    public TelegramWebhookRegistrar(TelegramApiClient telegramApiClient) {
         this.telegramApiClient = telegramApiClient;
     }
 
@@ -25,8 +22,7 @@ public class TelegramWebhookRegistrar {
         try {
             telegramApiClient.registerWebhook();
         } catch (Exception ex) {
-            log.error(
-                    "Unable to register Telegram webhook. Check TELEGRAM_BOT_TOKEN, "
+            log.error("Unable to register Telegram webhook. Check TELEGRAM_BOT_TOKEN, "
                             + "TELEGRAM_WEBHOOK_SECRET and APP_BASE_URL.",
                     ex
             );
