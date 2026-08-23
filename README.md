@@ -186,6 +186,12 @@ If this bot is only for you, add that ID to Render:
 ALLOWED_TELEGRAM_USER_ID=123456789
 ```
 
+For multiple allowed users, separate IDs with commas:
+
+```text
+ALLOWED_TELEGRAM_USER_ID=123456789,987654321
+```
+
 Redeploy.
 
 ## Example usage

@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -159,10 +160,17 @@ public class TelegramCommandService {
             return true;
         }
 
+        return Arrays.stream(allowed.split(","))
+                .map(String::trim)
+                .filter(id -> !id.isBlank())
+                .anyMatch(id -> isAllowedId(id, userId));
+    }
+
+    private boolean isAllowedId(String allowedId, long userId) {
         try {
-            return Long.parseLong(allowed.trim()) == userId;
+            return Long.parseLong(allowedId) == userId;
         } catch (NumberFormatException ex) {
-            log.warn("ALLOWED_TELEGRAM_USER_ID is not a valid number. Denying access for safety.");
+            log.warn("ALLOWED_TELEGRAM_USER_ID contains an invalid value: {}", allowedId);
             return false;
         }
     }
@@ -172,7 +180,7 @@ public class TelegramCommandService {
                 💰 Expense Bot
 
                 Add an expense:
-                /add 5 coffee
+                /add 1.80 coffee
                 /add 12.50 lunch
                 /add 20000 khr breakfast
 
