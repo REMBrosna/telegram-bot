@@ -5,12 +5,15 @@ import com.brosna.expensebot.domain.Budget;
 import com.brosna.expensebot.domain.Expense;
 import com.brosna.expensebot.model.ParsedExpense;
 import com.brosna.expensebot.repository.BudgetRepository;
+import com.brosna.expensebot.repository.ExpenseRepository.CategoryTotal;
+import com.brosna.expensebot.repository.ExpenseRepository.CurrencyTotal;
 import com.brosna.expensebot.repository.ExpenseRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.text.NumberFormat;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -105,7 +108,11 @@ public class ExpenseService {
                     .append("\n");
         }
 
-        appendCurrencyTotals(result, expenses);
+        Map<String, BigDecimal> todayTotals = totalsByCurrency(expenses);
+        BigDecimal grandTotalUsd = convertTotals(todayTotals, "USD");
+
+        appendCurrencyTotals(result, todayTotals);
+        appendGrandTotal(result, grandTotalUsd, todayTotals);
         appendMonthlyBudgetStatuses(result, userId, today, zoneId);
 
         return result.toString().trim();
@@ -120,19 +127,16 @@ public class ExpenseService {
         Instant start = firstDay.atStartOfDay(zoneId).toInstant();
         Instant end = firstDay.plusMonths(1).atStartOfDay(zoneId).toInstant();
 
-        List<Expense> expenses =
-                expenseRepository
-                        .findByTelegramUserIdAndExpenseDateGreaterThanEqualAndExpenseDateLessThanOrderByExpenseDateDesc(
-                                userId,
-                                start,
-                                end
-                        );
-
         String month = today.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH);
+        Map<String, BigDecimal> currencyTotals = sumByCurrency(userId, start, end);
 
-        if (expenses.isEmpty()) {
+        if (currencyTotals.isEmpty()) {
             return "📭 No expenses for " + month + " " + today.getYear() + ".";
         }
+
+        Map<String, Budget> budgets = budgetRepository.findByTelegramUserId(userId)
+                .stream()
+                .collect(Collectors.toMap(Budget::getCurrency, budget -> budget));
 
         StringBuilder result = new StringBuilder("📊 ")
                 .append(month)
@@ -140,51 +144,36 @@ public class ExpenseService {
                 .append(today.getYear())
                 .append("\n");
 
-        Map<String, List<Expense>> byCurrency =
-                expenses.stream()
-                        .collect(Collectors.groupingBy(
-                                Expense::getCurrency,
-                                TreeMap::new,
-                                Collectors.toList()
-                        ));
+        Map<String, List<CategoryTotal>> categoryTotals = expenseRepository
+                .sumByCurrencyAndCategoryForPeriod(userId, start, end)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        CategoryTotal::getCurrency,
+                        TreeMap::new,
+                        Collectors.toList()
+                ));
 
         BigDecimal grandTotalUsd = BigDecimal.ZERO;
 
-        for (Map.Entry<String, List<Expense>> currencyEntry : byCurrency.entrySet()) {
+        for (Map.Entry<String, BigDecimal> currencyEntry : currencyTotals.entrySet()) {
             String currency = currencyEntry.getKey();
-            List<Expense> currencyExpenses = currencyEntry.getValue();
+            BigDecimal total = currencyEntry.getValue();
 
             result.append("\n")
                     .append(currency)
                     .append("\n");
 
-            Map<String, BigDecimal> categoryTotals =
-                    currencyExpenses.stream()
-                            .collect(
-                                    Collectors.groupingBy(
-                                            Expense::getCategory,
-                                            Collectors.reducing(
-                                                    BigDecimal.ZERO,
-                                                    Expense::getAmount,
-                                                    BigDecimal::add
-                                            )
-                                    )
-                            );
-
-            categoryTotals.entrySet().stream()
-                    .sorted(Map.Entry.<String, BigDecimal>comparingByValue().reversed())
+            categoryTotals.getOrDefault(currency, List.of())
+                    .stream()
+                    .sorted((first, second) -> second.getTotal().compareTo(first.getTotal()))
                     .forEach(entry ->
-                            result.append(emoji(entry.getKey()))
+                            result.append(emoji(entry.getCategory()))
                                     .append(" ")
-                                    .append(entry.getKey())
+                                    .append(entry.getCategory())
                                     .append(": ")
-                                    .append(formatMoney(entry.getValue(), currency))
+                                    .append(formatMoney(entry.getTotal(), currency))
                                     .append("\n")
                     );
-
-            BigDecimal total = currencyExpenses.stream()
-                    .map(Expense::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             grandTotalUsd = grandTotalUsd.add(convertToUsd(total, currency));
 
@@ -194,11 +183,10 @@ public class ExpenseService {
                     .append(formatMoney(total, currency))
                     .append("\n");
 
-            budgetRepository.findByTelegramUserIdAndCurrency(userId, currency)
-                    .ifPresent(budget -> appendBudgetStatus(result, budget.getAmount(), total, currency));
+            appendBudgetStatusIfPresent(result, budgets, currencyTotals, currency);
         }
 
-        appendGrandTotal(result, grandTotalUsd, byCurrency);
+        appendGrandTotal(result, grandTotalUsd, currencyTotals);
 
         return result.toString().trim();
     }
@@ -296,9 +284,7 @@ public class ExpenseService {
         return "🎯 Monthly " + currency + " budget set to " + formatMoney(amount, currency);
     }
 
-    private void appendCurrencyTotals(StringBuilder result, List<Expense> expenses) {
-        Map<String, BigDecimal> totals = totalsByCurrency(expenses);
-
+    private void appendCurrencyTotals(StringBuilder result, Map<String, BigDecimal> totals) {
         result.append("\n");
         totals.forEach(
                 (currency, total) ->
@@ -325,15 +311,7 @@ public class ExpenseService {
         Instant start = firstDay.atStartOfDay(zoneId).toInstant();
         Instant end = firstDay.plusMonths(1).atStartOfDay(zoneId).toInstant();
 
-        List<Expense> monthExpenses =
-                expenseRepository
-                        .findByTelegramUserIdAndExpenseDateGreaterThanEqualAndExpenseDateLessThanOrderByExpenseDateDesc(
-                                userId,
-                                start,
-                                end
-                        );
-
-        Map<String, BigDecimal> monthlyTotals = totalsByCurrency(monthExpenses);
+        Map<String, BigDecimal> monthlyTotals = sumByCurrency(userId, start, end);
 
         result.append("\n\nMonthly budget");
 
@@ -341,11 +319,22 @@ public class ExpenseService {
                 .sorted((first, second) -> first.getCurrency().compareTo(second.getCurrency()))
                 .forEach(budget -> {
                     String currency = budget.getCurrency();
-                    BigDecimal spent = monthlyTotals.getOrDefault(currency, BigDecimal.ZERO);
+                    BigDecimal spent = convertTotals(monthlyTotals, currency);
 
                     result.append("\n").append(currency).append("\n");
                     appendBudgetStatus(result, budget.getAmount(), spent, currency);
                 });
+    }
+
+    private Map<String, BigDecimal> sumByCurrency(Long userId, Instant start, Instant end) {
+        return expenseRepository.sumByCurrencyForPeriod(userId, start, end)
+                .stream()
+                .collect(Collectors.toMap(
+                        CurrencyTotal::getCurrency,
+                        CurrencyTotal::getTotal,
+                        BigDecimal::add,
+                        TreeMap::new
+                ));
     }
 
     private Map<String, BigDecimal> totalsByCurrency(List<Expense> expenses) {
@@ -357,11 +346,27 @@ public class ExpenseService {
                 ));
     }
 
+    private void appendBudgetStatusIfPresent(
+            StringBuilder result,
+            Map<String, Budget> budgets,
+            Map<String, BigDecimal> currencyTotals,
+            String currency
+    ) {
+        Budget budget = budgets.get(currency);
+
+        if (budget != null) {
+            appendBudgetStatus(result, budget.getAmount(), convertTotals(currencyTotals, currency), currency);
+        }
+    }
+
     private void appendBudgetStatus(StringBuilder result, BigDecimal budget, BigDecimal spent, String currency) {
         BigDecimal remaining = budget.subtract(spent);
 
         result.append("🎯 Budget: ")
                 .append(formatMoney(budget, currency))
+                .append("\n")
+                .append("💸 Spent: ")
+                .append(formatMoney(spent, currency))
                 .append("\n");
 
         if (remaining.signum() >= 0) {
@@ -384,12 +389,19 @@ public class ExpenseService {
         }
     }
 
+    private BigDecimal convertTotals(Map<String, BigDecimal> totals, String targetCurrency) {
+        return totals.entrySet()
+                .stream()
+                .map(entry -> convert(entry.getValue(), entry.getKey(), targetCurrency))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     private void appendGrandTotal(
             StringBuilder result,
             BigDecimal grandTotalUsd,
-            Map<String, List<Expense>> byCurrency
+            Map<String, BigDecimal> currencyTotals
     ) {
-        if (byCurrency.size() <= 1) {
+        if (currencyTotals.size() <= 1) {
             return;
         }
 
@@ -401,11 +413,25 @@ public class ExpenseService {
     }
 
     private BigDecimal convertToUsd(BigDecimal amount, String currency) {
-        if ("KHR".equals(currency)) {
+        return convert(amount, currency, "USD");
+    }
+
+    private BigDecimal convert(BigDecimal amount, String sourceCurrency, String targetCurrency) {
+        if (sourceCurrency.equals(targetCurrency)) {
+            return amount;
+        }
+
+        if ("KHR".equals(sourceCurrency) && "USD".equals(targetCurrency)) {
             return amount.divide(appProperties.khrToUsdRate(), 6, RoundingMode.HALF_UP);
         }
 
-        return amount;
+        if ("USD".equals(sourceCurrency) && "KHR".equals(targetCurrency)) {
+            return amount.multiply(appProperties.khrToUsdRate());
+        }
+
+        throw new IllegalArgumentException(
+                "Unsupported currency conversion: " + sourceCurrency + " to " + targetCurrency
+        );
     }
 
     private String formatRate(BigDecimal rate) {
@@ -414,9 +440,10 @@ public class ExpenseService {
 
     private String formatMoney(BigDecimal amount, String currency) {
         if ("KHR".equals(currency)) {
-            return amount.setScale(0, RoundingMode.HALF_UP)
-                    .toPlainString()
-                    + " KHR";
+            NumberFormat formatter = NumberFormat.getIntegerInstance(Locale.US);
+            formatter.setGroupingUsed(true);
+
+            return formatter.format(amount.setScale(0, RoundingMode.HALF_UP)) + " KHR";
         }
 
         return "$" + amount.setScale(2, RoundingMode.HALF_UP).toPlainString();

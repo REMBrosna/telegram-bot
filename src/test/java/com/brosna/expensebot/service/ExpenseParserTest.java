@@ -31,6 +31,15 @@ class ExpenseParserTest {
     }
 
     @Test
+    void shouldParseCommaAmount() {
+        ParsedExpense result = parser.parse("/add 10,000 khr lunch");
+
+        assertEquals(new BigDecimal("10000"), result.amount());
+        assertEquals("KHR", result.currency());
+        assertEquals("lunch", result.description());
+    }
+
+    @Test
     void shouldRejectNegativeAmount() {
         assertThrows(IllegalArgumentException.class, () -> parser.parse("/add -5 coffee"));
     }

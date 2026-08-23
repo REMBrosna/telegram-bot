@@ -2,11 +2,13 @@ package com.brosna.expensebot.service;
 
 import com.brosna.expensebot.config.TelegramProperties;
 import com.brosna.expensebot.telegram.TelegramApiClient;
+import com.brosna.expensebot.telegram.TelegramMessageTracker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 
+import java.util.List;
 import java.util.Locale;
 
 @Service
@@ -16,15 +18,18 @@ public class TelegramCommandService {
 
     private final ExpenseService expenseService;
     private final TelegramApiClient telegramApiClient;
+    private final TelegramMessageTracker messageTracker;
     private final TelegramProperties properties;
 
     public TelegramCommandService(
             ExpenseService expenseService,
             TelegramApiClient telegramApiClient,
+            TelegramMessageTracker messageTracker,
             TelegramProperties properties
     ) {
         this.expenseService = expenseService;
         this.telegramApiClient = telegramApiClient;
+        this.messageTracker = messageTracker;
         this.properties = properties;
     }
 
@@ -47,26 +52,49 @@ public class TelegramCommandService {
                 .path("id")
                 .asLong();
 
+        int messageId = message.path("message_id").asInt();
+
         String text = textNode.asText("").trim();
         if (text.isBlank()) {
             return;
         }
 
         if (!isAllowed(userId)) {
-            telegramApiClient.sendMessage(chatId, "🔒 This is a private expense bot.");
+            sendAndTrack(chatId, "🔒 This is a private expense bot.");
             return;
         }
 
+        messageTracker.track(chatId, messageId);
+
         try {
+            if (isClearCommand(text)) {
+                clearChat(chatId);
+                return;
+            }
+
             String response = route(userId, text);
-            telegramApiClient.sendMessage(chatId, response);
+            sendAndTrack(chatId, response);
 
         } catch (IllegalArgumentException ex) {
-            telegramApiClient.sendMessage(chatId, "❌ " + ex.getMessage());
+            sendAndTrack(chatId, "❌ " + ex.getMessage());
         } catch (Exception ex) {
             log.error("Failed to process Telegram update", ex);
-            telegramApiClient.sendMessage(chatId, "❌ Something went wrong. Please try again.");
+            sendAndTrack(chatId, "❌ Something went wrong. Please try again.");
         }
+    }
+
+    private boolean isClearCommand(String text) {
+        return text.equalsIgnoreCase("/clear");
+    }
+
+    private void clearChat(long chatId) {
+        List<Integer> messageIds = messageTracker.drain(chatId);
+        telegramApiClient.deleteMessages(chatId, messageIds);
+    }
+
+    private void sendAndTrack(long chatId, String text) {
+        int messageId = telegramApiClient.sendMessage(chatId, text);
+        messageTracker.track(chatId, messageId);
     }
 
     private String route(long userId, String text) {
@@ -119,6 +147,7 @@ public class TelegramCommandService {
                 /history
                 /budget 500
                 /delete 15
+                /clear
                 /help
                 """;
     }
@@ -162,6 +191,9 @@ public class TelegramCommandService {
 
                 Delete:
                 /delete 15
+
+                Clear recent chat messages:
+                /clear
 
                 My Telegram ID:
                 /whoami

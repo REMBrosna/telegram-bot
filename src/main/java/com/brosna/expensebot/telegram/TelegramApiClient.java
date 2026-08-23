@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -23,12 +24,25 @@ public class TelegramApiClient {
         this.restClient = RestClient.create();
     }
 
-    public void sendMessage(long chatId, String text) {
+    public int sendMessage(long chatId, String text) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("chat_id", chatId);
         body.put("text", text);
 
-        post("sendMessage", body);
+        JsonNode response = post("sendMessage", body);
+        return response.path("result").path("message_id").asInt();
+    }
+
+    public void deleteMessages(long chatId, Collection<Integer> messageIds) {
+        if (messageIds.isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("chat_id", chatId);
+        body.put("message_ids", messageIds);
+
+        post("deleteMessages", body);
     }
 
     public void registerWebhook() {

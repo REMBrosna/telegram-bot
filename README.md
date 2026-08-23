@@ -32,6 +32,7 @@ Commands:
 /budget 2000000 khr
 
 /delete 15
+/clear
 /whoami
 ```
 
