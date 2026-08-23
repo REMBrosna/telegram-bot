@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: telegram-expense-bot
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 0
+      connection-timeout: 30000
+      idle-timeout: 60000
+      max-lifetime: 600000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+server:
+  port: ${PORT:8080}
+  address: 0.0.0.0
+
+telegram:
+  bot-token: ${TELEGRAM_BOT_TOKEN}
+  webhook-secret: ${TELEGRAM_WEBHOOK_SECRET}
+  app-base-url: ${APP_BASE_URL:${RENDER_EXTERNAL_URL:}}
+  allowed-user-id: ${ALLOWED_TELEGRAM_USER_ID:}
+
+app:
+  time-zone: ${APP_TIME_ZONE:Asia/Phnom_Penh}
