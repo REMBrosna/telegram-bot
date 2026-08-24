@@ -357,10 +357,8 @@ public class ExpenseService {
                 .sorted((first, second) -> first.getCurrency().compareTo(second.getCurrency()))
                 .forEach(budget -> {
                     String currency = budget.getCurrency();
-                    BigDecimal spent = convertTotals(monthlyTotals, currency);
-
                     result.append("\n").append(currency).append("\n");
-                    appendBudgetStatus(result, budget.getAmount(), spent, currency);
+                    appendBudgetStatus(result, budget.getAmount(), monthlyTotals, currency);
                 });
     }
 
@@ -430,17 +428,41 @@ public class ExpenseService {
         Budget budget = budgets.get(currency);
 
         if (budget != null) {
-            appendBudgetStatus(result, budget.getAmount(), convertTotals(currencyTotals, currency), currency);
+            appendBudgetStatus(result, budget.getAmount(), currencyTotals, currency);
         }
     }
 
-    private void appendBudgetStatus(StringBuilder result, BigDecimal budget, BigDecimal spent, String currency) {
+    private void appendBudgetStatus(
+            StringBuilder result,
+            BigDecimal budget,
+            Map<String, BigDecimal> currencyTotals,
+            String currency
+    ) {
+        BigDecimal spent = convertTotals(currencyTotals, currency);
         BigDecimal remaining = budget.subtract(spent);
 
         result.append("🎯 Budget: ")
                 .append(formatMoney(budget, currency))
                 .append("\n")
-                .append("💸 Spent: ")
+                .append("🧮 Spent calculation:\n");
+
+        currencyTotals.forEach((sourceCurrency, amount) -> {
+            BigDecimal converted = convert(amount, sourceCurrency, currency);
+
+            result.append("• ")
+                    .append(sourceCurrency)
+                    .append(" expenses: ")
+                    .append(formatMoney(amount, sourceCurrency));
+
+            if (!sourceCurrency.equals(currency)) {
+                result.append(" → ")
+                        .append(formatMoney(converted, currency));
+            }
+
+            result.append("\n");
+        });
+
+        result.append("💸 Total spent: ")
                 .append(formatMoney(spent, currency))
                 .append("\n");
 
