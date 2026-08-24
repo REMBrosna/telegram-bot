@@ -23,12 +23,9 @@ public class TelegramApiClient {
     private final TelegramProperties properties;
     private final RestClient restClient;
 
-    public TelegramApiClient(
-            TelegramProperties properties,
-            RestClient.Builder restClientBuilder
-    ) {
+    public TelegramApiClient(TelegramProperties properties) {
         this.properties = properties;
-        this.restClient = restClientBuilder
+        this.restClient = RestClient.builder()
                 .baseUrl(TELEGRAM_API_BASE_URL + requireText(properties.getBotToken(), "Telegram bot token"))
                 .build();
     }
