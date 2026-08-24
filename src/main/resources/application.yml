@@ -36,3 +36,8 @@ telegram:
 app:
   time-zone: ${APP_TIME_ZONE:Asia/Phnom_Penh}
   khr-to-usd-rate: ${APP_KHR_TO_USD_RATE:4100}
+  report:
+    daily-enabled: ${DAILY_REPORT_ENABLED:true}
+    daily-cron: "${DAILY_REPORT_CRON:0 55 23 * * *}"
+    monthly-enabled: ${MONTHLY_REPORT_ENABLED:true}
+    monthly-cron: "${MONTHLY_REPORT_CRON:0 59 23 L * *}"
