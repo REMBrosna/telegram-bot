@@ -34,6 +34,9 @@ public class Expense {
     @Column(nullable = false, length = 30)
     private String category;
 
+    @Column(name = "category_manual")
+    private Boolean categoryManual;
+
     @Column(nullable = false, length = 255)
     private String description;
 
@@ -58,6 +61,7 @@ public class Expense {
         this.amount = amount;
         this.currency = currency;
         this.category = category;
+        this.categoryManual = false;
         this.description = description;
         this.expenseDate = expenseDate;
         this.createdAt = Instant.now();
@@ -81,6 +85,15 @@ public class Expense {
 
     public String getCategory() {
         return category;
+    }
+
+    public boolean isCategoryManual() {
+        return Boolean.TRUE.equals(categoryManual);
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+        this.categoryManual = true;
     }
 
     public String getDescription() {

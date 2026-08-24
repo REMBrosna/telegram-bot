@@ -25,12 +25,40 @@ public class TelegramApiClient {
     }
 
     public int sendMessage(long chatId, String text) {
+        return sendMessage(chatId, text, null);
+    }
+
+    public int sendMessage(long chatId, String text, Map<String, Object> replyMarkup) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("chat_id", chatId);
         body.put("text", text);
 
+        if (replyMarkup != null) {
+            body.put("reply_markup", replyMarkup);
+        }
+
         JsonNode response = post("sendMessage", body);
         return response.path("result").path("message_id").asInt();
+    }
+
+    public void editMessageText(long chatId, int messageId, String text) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("chat_id", chatId);
+        body.put("message_id", messageId);
+        body.put("text", text);
+
+        post("editMessageText", body);
+    }
+
+    public void answerCallbackQuery(String callbackQueryId, String text) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("callback_query_id", callbackQueryId);
+
+        if (text != null && !text.isBlank()) {
+            body.put("text", text);
+        }
+
+        post("answerCallbackQuery", body);
     }
 
     public void deleteMessages(long chatId, Collection<Integer> messageIds) {

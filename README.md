@@ -45,6 +45,8 @@ You can also omit `/add`:
 
 Default currency is USD.
 
+After adding an expense, the bot shows category buttons in Telegram. Tap a button to update the saved category for that expense.
+
 The bot automatically categorizes common expenses:
 
 - COFFEE

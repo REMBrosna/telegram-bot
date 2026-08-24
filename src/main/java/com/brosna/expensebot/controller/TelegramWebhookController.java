@@ -24,10 +24,9 @@ public class TelegramWebhookController {
     }
 
     @PostMapping("/telegram/webhook")
-    public ResponseEntity<Void> telegramWebhook(
-            @RequestHeader(value = "X-Telegram-Bot-Api-Secret-Token", required = false) String secretToken,
-            @RequestBody JsonNode update
-    ) {
+    public ResponseEntity<Void> telegramWebhook(@RequestHeader(value = "X-Telegram-Bot-Api-Secret-Token", required = false) String secretToken,
+            @RequestBody JsonNode update) {
+
         if (secretToken == null || !secretToken.equals(properties.getWebhookSecret())) {
             return ResponseEntity.status(403).build();
         }

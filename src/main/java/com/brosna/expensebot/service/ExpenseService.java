@@ -3,6 +3,7 @@ package com.brosna.expensebot.service;
 import com.brosna.expensebot.config.AppProperties;
 import com.brosna.expensebot.domain.Budget;
 import com.brosna.expensebot.domain.Expense;
+import com.brosna.expensebot.model.ExpenseAddResult;
 import com.brosna.expensebot.model.ParsedExpense;
 import com.brosna.expensebot.repository.BudgetRepository;
 import com.brosna.expensebot.repository.ExpenseRepository.CurrencyTotal;
@@ -21,12 +22,25 @@ import java.time.format.TextStyle;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 @Service
 @Transactional
 public class ExpenseService {
+
+    private static final Set<String> CATEGORIES = Set.of(
+            "COFFEE",
+            "FOOD",
+            "CAR",
+            "TRANSPORT",
+            "SHOPPING",
+            "BILL",
+            "ENTERTAINMENT",
+            "HEALTH",
+            "OTHER"
+    );
 
     private final ExpenseRepository expenseRepository;
     private final BudgetRepository budgetRepository;
@@ -48,7 +62,7 @@ public class ExpenseService {
         this.appProperties = appProperties;
     }
 
-    public String addExpense(Long userId, String command) {
+    public ExpenseAddResult addExpense(Long userId, String command) {
         ParsedExpense parsed = expenseParser.parse(command);
 
         String category = categoryDetector.detect(parsed.description());
@@ -58,7 +72,7 @@ public class ExpenseService {
 
         expense = expenseRepository.save(expense);
 
-        return """
+        String message = """
                 ✅ Expense added
                 #%d
                 %s %s
@@ -68,6 +82,31 @@ public class ExpenseService {
                 expense.getId(),
                 emoji(category),
                 category,
+                expense.getDescription(),
+                formatMoney(expense.getAmount(), expense.getCurrency())
+        ).trim();
+
+        return new ExpenseAddResult(message, expense.getId());
+    }
+
+    public String updateCategory(Long userId, Long expenseId, String category) {
+        String normalizedCategory = normalizeCategory(category);
+        Expense expense = expenseRepository.findByIdAndTelegramUserId(expenseId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Expense #" + expenseId + " was not found."));
+
+        expense.setCategory(normalizedCategory);
+        expenseRepository.save(expense);
+
+        return """
+                ✅ Category updated
+                #%d
+                %s %s
+                %s
+                %s
+                """.formatted(
+                expense.getId(),
+                emoji(normalizedCategory),
+                normalizedCategory,
                 expense.getDescription(),
                 formatMoney(expense.getAmount(), expense.getCurrency())
         ).trim();
@@ -359,6 +398,10 @@ public class ExpenseService {
     }
 
     private String displayCategory(Expense expense) {
+        if (expense.isCategoryManual()) {
+            return expense.getCategory();
+        }
+
         String detectedCategory = categoryDetector.detect(expense.getDescription());
 
         if (!"OTHER".equals(detectedCategory)) {
@@ -366,6 +409,16 @@ public class ExpenseService {
         }
 
         return expense.getCategory();
+    }
+
+    private String normalizeCategory(String category) {
+        String normalized = category.toUpperCase(Locale.ROOT).trim();
+
+        if (!CATEGORIES.contains(normalized)) {
+            throw new IllegalArgumentException("Unsupported category: " + category);
+        }
+
+        return normalized;
     }
 
     private void appendBudgetStatusIfPresent(
