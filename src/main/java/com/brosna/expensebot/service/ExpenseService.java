@@ -163,7 +163,7 @@ public class ExpenseService {
         LocalDate firstDay = today.withDayOfMonth(1);
 
         Instant start = firstDay.atStartOfDay(zoneId).toInstant();
-        Instant end = firstDay.plusMonths(1).atStartOfDay(zoneId).toInstant();
+        Instant end = today.plusDays(1).atStartOfDay(zoneId).toInstant();
 
         String month = today.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH);
         List<Expense> monthlyExpenses = expenseRepository
@@ -178,18 +178,26 @@ public class ExpenseService {
             return "📭 No expenses for " + month + " " + today.getYear() + ".";
         }
 
+        LocalDate reportStart = monthlyExpenses.stream()
+                .map(expense -> expense.getExpenseDate().atZone(zoneId).toLocalDate())
+                .min(LocalDate::compareTo)
+                .orElse(today);
+
         Map<String, Budget> budgets = budgetRepository.findByTelegramUserId(userId)
                 .stream()
                 .collect(Collectors.toMap(Budget::getCurrency, budget -> budget));
 
         StringBuilder result = new StringBuilder("📊 ")
+                .append(reportStart.getDayOfMonth())
+                .append("–")
+                .append(today.getDayOfMonth())
+                .append(" ")
                 .append(month)
                 .append(" ")
                 .append(today.getYear())
                 .append("\n");
 
         Map<String, Map<String, BigDecimal>> categoryTotals = totalsByCurrencyAndCategory(monthlyExpenses);
-
         BigDecimal grandTotalUsd = BigDecimal.ZERO;
 
         for (Map.Entry<String, BigDecimal> currencyEntry : currencyTotals.entrySet()) {
@@ -214,14 +222,22 @@ public class ExpenseService {
                     );
 
             grandTotalUsd = grandTotalUsd.add(convertToUsd(total, currency));
+        }
 
-            result.append("\n💰 Total ")
-                    .append(currency)
-                    .append(": ")
-                    .append(formatMoney(total, currency))
-                    .append("\n");
+        if (!budgets.isEmpty()) {
+            result.append("\n────────────────────\n");
 
-            appendBudgetStatusIfPresent(result, budgets, currencyTotals, currency);
+            budgets.values()
+                    .stream()
+                    .sorted((first, second) -> first.getCurrency().compareTo(second.getCurrency()))
+                    .forEach(budget ->
+                            appendBudgetStatus(
+                                    result,
+                                    budget.getAmount(),
+                                    currencyTotals,
+                                    budget.getCurrency()
+                            )
+                    );
         }
 
         appendGrandTotal(result, grandTotalUsd, currencyTotals);
