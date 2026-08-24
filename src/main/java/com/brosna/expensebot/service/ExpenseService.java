@@ -5,7 +5,6 @@ import com.brosna.expensebot.domain.Budget;
 import com.brosna.expensebot.domain.Expense;
 import com.brosna.expensebot.model.ParsedExpense;
 import com.brosna.expensebot.repository.BudgetRepository;
-import com.brosna.expensebot.repository.ExpenseRepository.CategoryTotal;
 import com.brosna.expensebot.repository.ExpenseRepository.CurrencyTotal;
 import com.brosna.expensebot.repository.ExpenseRepository;
 import org.springframework.stereotype.Service;
@@ -100,7 +99,7 @@ public class ExpenseService {
             result.append("#")
                     .append(expense.getId())
                     .append(" ")
-                    .append(emoji(expense.getCategory()))
+                    .append(emoji(displayCategory(expense)))
                     .append(" ")
                     .append(expense.getDescription())
                     .append(" — ")
@@ -128,7 +127,13 @@ public class ExpenseService {
         Instant end = firstDay.plusMonths(1).atStartOfDay(zoneId).toInstant();
 
         String month = today.getMonth().getDisplayName(TextStyle.FULL, Locale.ENGLISH);
-        Map<String, BigDecimal> currencyTotals = sumByCurrency(userId, start, end);
+        List<Expense> monthlyExpenses = expenseRepository
+                .findByTelegramUserIdAndExpenseDateGreaterThanEqualAndExpenseDateLessThanOrderByExpenseDateDesc(
+                        userId,
+                        start,
+                        end
+                );
+        Map<String, BigDecimal> currencyTotals = totalsByCurrency(monthlyExpenses);
 
         if (currencyTotals.isEmpty()) {
             return "📭 No expenses for " + month + " " + today.getYear() + ".";
@@ -144,14 +149,7 @@ public class ExpenseService {
                 .append(today.getYear())
                 .append("\n");
 
-        Map<String, List<CategoryTotal>> categoryTotals = expenseRepository
-                .sumByCurrencyAndCategoryForPeriod(userId, start, end)
-                .stream()
-                .collect(Collectors.groupingBy(
-                        CategoryTotal::getCurrency,
-                        TreeMap::new,
-                        Collectors.toList()
-                ));
+        Map<String, Map<String, BigDecimal>> categoryTotals = totalsByCurrencyAndCategory(monthlyExpenses);
 
         BigDecimal grandTotalUsd = BigDecimal.ZERO;
 
@@ -163,15 +161,16 @@ public class ExpenseService {
                     .append(currency)
                     .append("\n");
 
-            categoryTotals.getOrDefault(currency, List.of())
+            categoryTotals.getOrDefault(currency, Map.of())
+                    .entrySet()
                     .stream()
-                    .sorted((first, second) -> second.getTotal().compareTo(first.getTotal()))
+                    .sorted((first, second) -> second.getValue().compareTo(first.getValue()))
                     .forEach(entry ->
-                            result.append(emoji(entry.getCategory()))
+                            result.append(emoji(entry.getKey()))
                                     .append(" ")
-                                    .append(entry.getCategory())
+                                    .append(entry.getKey())
                                     .append(": ")
-                                    .append(formatMoney(entry.getTotal(), currency))
+                                    .append(formatMoney(entry.getValue(), currency))
                                     .append("\n")
                     );
 
@@ -213,7 +212,7 @@ public class ExpenseService {
                     .append(" ")
                     .append(date)
                     .append(" ")
-                    .append(emoji(expense.getCategory()))
+                    .append(emoji(displayCategory(expense)))
                     .append(" ")
                     .append(expense.getDescription())
                     .append(" — ")
@@ -346,6 +345,29 @@ public class ExpenseService {
                 ));
     }
 
+    private Map<String, Map<String, BigDecimal>> totalsByCurrencyAndCategory(List<Expense> expenses) {
+        return expenses.stream()
+                .collect(Collectors.groupingBy(
+                        Expense::getCurrency,
+                        TreeMap::new,
+                        Collectors.groupingBy(
+                                this::displayCategory,
+                                TreeMap::new,
+                                Collectors.reducing(BigDecimal.ZERO, Expense::getAmount, BigDecimal::add)
+                        )
+                ));
+    }
+
+    private String displayCategory(Expense expense) {
+        String detectedCategory = categoryDetector.detect(expense.getDescription());
+
+        if (!"OTHER".equals(detectedCategory)) {
+            return detectedCategory;
+        }
+
+        return expense.getCategory();
+    }
+
     private void appendBudgetStatusIfPresent(
             StringBuilder result,
             Map<String, Budget> budgets,
@@ -451,7 +473,8 @@ public class ExpenseService {
 
     private String emoji(String category) {
         return switch (category) {
-            case "FOOD" -> "🍔";
+            case "COFFEE" -> "\u2615";
+            case "FOOD" -> "\uD83C\uDF7D\uFE0F";
             case "CAR" -> "🚗";
             case "TRANSPORT" -> "🛺";
             case "SHOPPING" -> "🛍";

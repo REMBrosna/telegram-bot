@@ -11,8 +11,12 @@ public class CategoryDetector {
     public String detect(String description) {
         String text = description.toLowerCase(Locale.ROOT);
 
-        if (contains(text, "coffee", "food", "lunch", "dinner", "breakfast", "restaurant", "kfc",
-                "pizza", "burger", "rice", "noodle", "drink", "cafe")) {
+        if (contains(text, "coffee", "cafe", "latte", "cappuccino", "espresso", "americano")) {
+            return "COFFEE";
+        }
+
+        if (contains(text, "food", "lunch", "dinner", "breakfast", "restaurant", "kfc",
+                "pizza", "burger", "rice", "noodle", "drink")) {
             return "FOOD";
         }
 

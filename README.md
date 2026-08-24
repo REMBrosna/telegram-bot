@@ -47,6 +47,7 @@ Default currency is USD.
 
 The bot automatically categorizes common expenses:
 
+- COFFEE
 - FOOD
 - CAR
 - TRANSPORT
@@ -205,7 +206,7 @@ Response:
 ```text
 ✅ Expense added
 #12
-🍔 FOOD
+☕ COFFEE
 coffee
 $5.00 USD
 ```
@@ -220,7 +221,7 @@ Response:
 📊 August 2026
 
 USD
-🍔 FOOD: $100.00
+☕ COFFEE: $100.00
 🚗 CAR: $80.00
 🧾 BILL: $20.00
 
